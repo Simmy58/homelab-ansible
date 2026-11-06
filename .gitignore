@@ -1,0 +1,15 @@
+# Backups
+backups/
+
+# Ansible temporary files
+*.retry
+*.log
+
+# Secrets and private keys
+*.vault
+*.pem
+*.key
+
+# Private host IP addresses
+host_vars/
+group_vars/

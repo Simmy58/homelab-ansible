@@ -1,0 +1,72 @@
+
+---
+- name: Homelab health check
+  hosts: linux_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    ignored_failed_units:
+      - dev-hugepages.mount
+      - dev-mqueue.mount
+      - run-lock.mount
+      - tmp.mount
+      - nftables.service
+      - systemd-networkd.service
+      - systemd-networkd.socket
+      - systemd-logind.service
+
+  tasks:
+    - name: Check system uptime
+      ansible.builtin.command: uptime -p
+      register: system_uptime
+      changed_when: false
+
+    - name: Check root filesystem usage
+      ansible.builtin.command: df -P /
+      register: disk_usage
+      changed_when: false
+
+    - name: Calculate root filesystem usage
+      ansible.builtin.set_fact:
+        disk_usage_percent: "{{ disk_usage.stdout_lines[-1].split()[4] | regex_replace('%', '') | int }}"
+
+    - name: Determine disk health
+      ansible.builtin.set_fact:
+        disk_health: >-
+          {{
+            'CRITICAL' if disk_usage_percent >= 90
+            else 'WARNING' if disk_usage_percent >= 80
+            else 'HEALTHY'
+          }}
+     
+    - name: Check failed systemd services
+      ansible.builtin.command: systemctl --failed --no-legend --plain
+      register: failed_services
+      changed_when: false
+      failed_when: false
+
+    - name: Filter known LXC-related failures
+      ansible.builtin.set_fact:
+        genuine_failed_services: >-
+          {{
+            failed_services.stdout_lines
+            | map('trim')
+            | map('split')
+            | map('first')
+            | reject('in', ignored_failed_units)
+            | list
+          }}
+
+    - name: Display health report
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "OS: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          - "Uptime: {{ system_uptime.stdout }}"
+          - "CPU cores: {{ ansible_facts['processor_vcpus'] }}"
+          - "Memory: {{ ansible_facts['memtotal_mb'] }} MB"
+          - "Disk: {{ disk_usage.stdout_lines[-1] }}"
+          - "Disk health: {{ disk_health }} ({{ disk_usage_percent }}%)"
+          - "Failed services: {{ genuine_failed_services | join(', ') if genuine_failed_services | length > 0 else 'None' }}"
+
