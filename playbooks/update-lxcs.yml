@@ -1,4 +1,3 @@
-
 ---
 - name: Update Debian LXC containers
   hosts: linux_servers
@@ -30,4 +29,3 @@
         msg: >-
           {{ 'REBOOT REQUIRED' if reboot_required_file.stat.exists
           else 'No reboot required' }}
-
